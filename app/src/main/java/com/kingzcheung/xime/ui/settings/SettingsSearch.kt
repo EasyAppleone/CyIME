@@ -138,6 +138,11 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         page("语言与方案", input, "languages", "语言 输入方案 键盘布局 切换方式 双拼 五笔 形码 笔画 仓颉 速成 注音 大千 日语 英语 九键 26键 14键 语言管理 中文 日文 英文 拼音 导入方案的语言 未标注语言 方案语言"),
         page("键盘布局", input, layoutIndex, "布局 26键 九键 14键 布局与显示 自定义布局 按键符号 分体"),
         page("按键与手势", input, gesturePage, "手势 角标 光标 空格 长按 上滑 下滑 滑动"),
+        // 11-16：键盘上左右滑动换输入方式、笔画键上/下滑自定义。
+        SettingsSearchEntry("左右滑动切换输入方式", layouts, layoutIndex,
+            "左右滑动 横滑 滑动切换 换输入方式 切换方案 拼音 笔画 九键 双拼 左划 右划 手势 换输入法"),
+        page("笔画键手势", layouts, layoutPage("stroke_gestures"),
+            "笔画 笔画布局 笔画键 上滑 下滑 复制 粘贴 剪切 全选 撤销 清空 光标 手势 自定义 一 丨 丿 丶 乛"),
         page("按键技巧", gestures, layoutPage("key_tips"), "技巧 说明 教程 帮助 Shift Ctrl 大写 锁定 快捷键 复制 粘贴 隐藏 功能 拖动 九键 数字键"),
         page("物理键盘", input, SettingsRoutes.HardwareKeyboard, "实体键盘 蓝牙键盘 外接键盘 硬键盘 语言切换快捷键 候选跟随 浮条 浮窗"),
         page("主题与外观", look, SettingsRoutes.Theme, "主题 皮肤 颜色 配色 深色 浅色 夜间 玻璃 背景 外观 视觉样式 定制"),
