@@ -23,6 +23,7 @@ import androidx.compose.material.icons.twotone.Spellcheck
 import androidx.compose.material.icons.twotone.EmojiSymbols
 import androidx.compose.material.icons.twotone.DashboardCustomize
 import androidx.compose.material.icons.twotone.ScreenRotation
+import androidx.compose.material.icons.twotone.SwapHoriz
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.twotone.Send
@@ -139,6 +140,21 @@ private fun LayoutDisplayPage(
                         checked = perOrientation, onCheckedChange = {
                             perOrientation = it; com.kingzcheung.xime.settings.OrientationLayouts.setEnabled(context, it)
                         })
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    // 用户 11-16：整块键盘（输入页面）上左右滑动切换输入方式——拼音、九键、双拼、笔画之间换，左划下一个、右划上一个。
+                    val schemaSwipePrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
+                    SettingsToggleItem(Icons.TwoTone.SwapHoriz, "左右滑动切换输入方式",
+                        "在当前语言已启用的输入方式（拼音、九键、双拼、笔画等）之间切换：左划下一个、右划上一个，" +
+                            "不用先开「输入方式」面板。候选栏翻候选、删除键滑动删字这些本来就横滑的地方照旧；" +
+                            "开着滑行输入或键盘滑动移光标时让位给它们。",
+                        checked = schemaSwipePrefs.schemaSwipeSwitch, onCheckedChange = { on ->
+                            schemaSwipePrefs.copy(schemaSwipeSwitch = on).save(context)
+                        })
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    // 用户 11-16：笔画布局每个键上滑、下滑各做什么（复制、粘贴、全选……）。
+                    SettingsItem(Icons.TwoTone.Gesture, "笔画键手势",
+                        "笔画布局里 一 丨 丿 丶 乛 等每个键上滑、下滑分别做什么，可设复制、粘贴、全选等",
+                        onClick = { openPage("stroke_gestures") }, showArrow = true)
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     SettingsItem(Icons.TwoTone.EmojiSymbols, "按键符号", "每个键滑出的符号，侧栏和数字行放什么",
                         onClick = { context.startActivity(android.content.Intent(context, com.kingzcheung.xime.CustomLayoutActivity::class.java)
@@ -676,6 +692,7 @@ private fun LayoutDisplayPage(
             }
 
             if (page == "key_tips") item { KeyTipsSettings() }
+            if (page == "stroke_gestures") item { StrokeKeyGestureSettings() }
             if (page == "gestures") item {
                 InputExperienceSettings(setOf(InputExperiencePart.SYMBOLS), "角标与长按")
             }
@@ -774,6 +791,7 @@ internal val LayoutDisplayPages = listOf(
     Triple("bottom_gap", "底部留白校准", "查看键盘底部，调低、抬高或恢复系统建议"),
     Triple("candidates", "候选词", "字号、候选注释(拼音或中英释义)、取消按钮、输入框或候选栏显示"),
     Triple("gestures", "按键与手势", "角标输入方式、删除键、长按空格、光标、长按语言键"),
+    Triple("stroke_gestures", "笔画键手势", "笔画布局每个键上滑、下滑分别做什么"),
     // 不在首页列出，从「按键与手势」最下面进入。
     Triple("key_tips", "按键技巧", "Shift、Ctrl(!@#)、空格、删除键的隐藏操作"),
 )

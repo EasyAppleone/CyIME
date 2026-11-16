@@ -594,7 +594,36 @@ fun KeyboardView(
         }
         // 候选栏上面那一截的高度（翻译栏、工具面板、剪贴板搜索、拼音编辑条）；菜单等面板据此让开工具栏，见 belowCandidateBar。
         val aboveCandidateBarPx = remember { mutableIntStateOf(0) }
-        Box(modifier = Modifier.fillMaxSize().then(contentModifier).inlineQuickActionGestures(inlineEditor).onSizeChanged { size ->
+        // 「键盘布局 › 左右滑动切换输入方式」（用户 11-16）：在整块键盘（输入页面）上横滑，左划下一个、右划上一个。
+        // 只在键盘本体上接：菜单/剪贴板等覆盖层、手写展开、调节键盘时都不接；
+        // 开着滑行输入时让位——滑行本身就是横着画线，接了会一边打字一边换方案。
+        // 键盘滑动移光标也吃横滑，开着时同样让位。
+        val canSwipeSwitchSchema = inputPreferences.schemaSwipeSwitch &&
+            page !is KeyboardPage.Overlay && !state.isHandwritingMode && !state.handwritingExpanded &&
+            !resizeActive && !inputPreferences.glideTyping && !inputPreferences.chineseGlideTyping &&
+            !inputPreferences.t9GlideTyping && inputPreferences.cursorGesture != CursorGestureMode.KEYBOARD
+        // 可切换的范围：当前语言里已启用的输入方式（拼音、九键、双拼、笔画……），和「输入方式」面板那一排同源同序。
+        val swipeSchemaCycle = remember(state.schemas, state.currentSchemaId, state.isAsciiMode) {
+            com.kingzcheung.xime.settings.InputModes.inCurrentLanguage(state.schemas,
+                com.kingzcheung.xime.settings.InputModes.selectedId(state.currentSchemaId, state.isAsciiMode))
+        }
+        val schemaSwipeHandler = remember { SchemaSwipeHandler() }
+        schemaSwipeHandler.onSwitch = { forward ->
+            if (swipeSchemaCycle.size > 1) {
+                val selected = com.kingzcheung.xime.settings.InputModes.selectedId(state.currentSchemaId, state.isAsciiMode)
+                val size = swipeSchemaCycle.size
+                val index = swipeSchemaCycle.indexOfFirst { it.schemaId == selected }
+                val target = if (index < 0) 0 else ((index + if (forward) 1 else -1) % size + size) % size
+                val next = swipeSchemaCycle[target].schemaId
+                if (next != selected) {
+                    onHapticFeedback?.invoke()
+                    (callbacks.onSwitchSchema ?: callbacks.onSwitchSchemaForLayout)?.invoke(next)
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().then(contentModifier).inlineQuickActionGestures(inlineEditor)
+            .then(Modifier.schemaSwipeSwitch(canSwipeSwitchSchema, schemaSwipeHandler))
+            .onSizeChanged { size ->
             if (!barScaleFrozen && size.width > 0 && size.height > 0) {
                 candidateBarScaleState.floatValue = candidateBarScale(size.width / resizeControlDensity.density,
                     size.height / resizeControlDensity.density - renderedBottomPaddingDp)

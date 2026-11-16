@@ -36,6 +36,7 @@ import com.kingzcheung.xime.keyboard.GestureAction
 import com.kingzcheung.xime.settings.DisplayMode
 import com.kingzcheung.xime.settings.GestureDef
 import com.kingzcheung.xime.settings.KeysConfigHelper
+import com.kingzcheung.xime.settings.StrokeKeyGestures
 import com.kingzcheung.xime.settings.swipeHandlerFor
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +52,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -266,6 +268,8 @@ private data class StrokeKeySwipes(
     /** 上滑键面提示（空串 = 显式不印键面，bubble 模式用；null = 回退 swipeText） */
     val swipeUpKeyLabel: String? = null,
     val swipeDownKeyLabel: String? = null,
+    /** 右上角数字角标是否还成立：上滑被改成别的动作时不再印数字（用户 11-16 自定义手势后）。 */
+    val keepDigitBadge: Boolean = true,
 )
 
 private val strokeKeys = listOf(
@@ -313,6 +317,12 @@ private fun StrokeKeyboardContent(
         ?: inputActions.onCommitText ?: onKeyPress
     val strokeSideSymbols = customSymbols
         ?: remember(configVersion) { KeysConfigHelper.getStrokeSideSymbols() }
+    // 「键盘布局 › 笔画键手势」的自定义（用户 11-16）：version 一变就重读，存完键盘立刻按新动作走。
+    val strokeGestureContext = LocalContext.current
+    val strokeGestureVersion = StrokeKeyGestures.version
+    val strokeGestureOverrides = remember(strokeGestureVersion, strokeGestureContext) {
+        StrokeKeyGestures.load(strokeGestureContext)
+    }
 
     // 符号面板统一阴影（与九键左栏候选面板同款样式）
     val density = LocalDensity.current
@@ -334,8 +344,12 @@ private fun StrokeKeyboardContent(
     }
 
     fun swipesFor(id: String, fallbackDigit: String): StrokeKeySwipes {
-        val gesture = KeysConfigHelper.getStrokeKeyGesture(id)
-        if (gesture == null || (gesture.swipeUp == null && gesture.swipeDown == null)) {
+        val yaml = KeysConfigHelper.getStrokeKeyGesture(id)
+        // 「键盘布局 › 笔画键手势」里设过的方向优先，没设过的方向继续跟 xime.yaml／内置默认。
+        val custom = strokeGestureOverrides[id]
+        val upDef = custom?.up?.toDef() ?: yaml?.swipeUp
+        val downDef = custom?.down?.toDef() ?: yaml?.swipeDown
+        if (upDef == null && downDef == null) {
             // 回退行为与内置默认（display: "key"）一致：仅键面提示，无滑动气泡
             return StrokeKeySwipes(
                 symbolInputText = fallbackDigit,
@@ -343,29 +357,30 @@ private fun StrokeKeyboardContent(
                 swipeUpKeyLabel = if (swipeHints.up && hintsActive) fallbackDigit else null,
             )
         }
+        // 「无操作」不写提示、也不留键面文字。
         fun hint(def: GestureDef?): String? =
-            def?.let { it.label.ifEmpty { it.value } }
+            def?.takeIf { it.action != GestureAction.NONE }?.let { it.label.ifEmpty { it.value } }
         // display 三态：key=仅键面提示（无气泡）、bubble=仅滑动气泡、both=键面+气泡。
         // SwipeableKeyButton 键面提示取 swipeUpKeyLabel ?: swipeText（null 回退气泡文本），
         // bubble 模式传空串显式压制键面显示；气泡仅 bubble/both 时传（key 关闭气泡）。
         val swipeUpKeyLabel = when {
             !swipeHints.up || !hintsActive -> null
-            gesture.swipeUp?.display == DisplayMode.BUBBLE -> ""
-            else -> hint(gesture.swipeUp)
+            upDef?.display == DisplayMode.BUBBLE -> ""
+            else -> hint(upDef)
         }
         return StrokeKeySwipes(
-            symbolInputText = gesture.swipeUp?.let { symbolInputValue(it.value.ifEmpty { it.label }, it.action) },
-            onSwipeUp = swipeHandlerFor(gesture.swipeUp, onKeyPress, onGestureAction),
-            onSwipeDown = swipeHandlerFor(gesture.swipeDown, onKeyPress, onGestureAction),
+            symbolInputText = upDef?.let { symbolInputValue(it.value.ifEmpty { it.label }, it.action) },
+            onSwipeUp = swipeHandlerFor(upDef, onKeyPress, onGestureAction),
+            onSwipeDown = swipeHandlerFor(downDef, onKeyPress, onGestureAction),
             swipeUpText = if (swipeHints.up && hintsActive &&
-                gesture.swipeUp?.display != DisplayMode.KEY) hint(gesture.swipeUp) else null,
+                upDef?.display != DisplayMode.KEY) hint(upDef) else null,
             swipeDownText = if (swipeHints.down && hintsActive &&
-                gesture.swipeDown?.display != DisplayMode.KEY) hint(gesture.swipeDown) else null,
+                downDef?.display != DisplayMode.KEY) hint(downDef) else null,
             swipeUpKeyLabel = swipeUpKeyLabel,
-            swipeDownKeyLabel = gesture.swipeDown?.let { def ->
-                if (swipeHints.down && hintsActive && def.display != DisplayMode.BUBBLE)
-                    def.label.ifEmpty { def.value } else null
-            },
+            swipeDownKeyLabel = if (swipeHints.down && hintsActive && downDef?.display != DisplayMode.BUBBLE)
+                hint(downDef) else null,
+            // 上滑改成了别的动作（复制、下滑清空……），右上角的数字角标就不对了，别印。
+            keepDigitBadge = custom?.up == null,
         )
     }
 
@@ -717,7 +732,7 @@ private fun StrokeKeyItem(
         onSwipe = swipes.onSwipeUp?.let { handler -> { _: String -> handler() } },
         onSwipeDown = swipes.onSwipeDown?.let { handler -> { _: String -> handler() } },
         onSwipeStateChange = onSwipeStateChange,
-        badgeText = swipeDigit,
+        badgeText = if (swipes.keepDigitBadge) swipeDigit else null,
         swipeText = swipes.swipeUpText,
         symbolInputText = swipes.symbolInputText,
         swipeDownText = swipes.swipeDownText,
@@ -756,7 +771,7 @@ private fun StrokeDigitKey(
         onSwipe = swipes.onSwipeUp?.let { handler -> { _: String -> handler() } },
         onSwipeDown = swipes.onSwipeDown?.let { handler -> { _: String -> handler() } },
         onSwipeStateChange = onSwipeStateChange,
-        badgeText = swipeDigit,
+        badgeText = if (swipes.keepDigitBadge) swipeDigit else null,
         swipeText = swipes.swipeUpText,
         symbolInputText = swipes.symbolInputText,
         swipeDownText = swipes.swipeDownText,
